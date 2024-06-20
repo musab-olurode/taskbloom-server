@@ -16,11 +16,10 @@ from .views import (
     post_task_activity,
     dashboard_statistics,
     get_tasks,
-    get_task,
+    get_or_trash_task,
     create_subtask,
     update_task,
     update_task_stage,
-    trash_task,
     delete_restore_task,
 )
 
@@ -42,11 +41,11 @@ urlpatterns = [
     path("task/activity/<uuid:id>", post_task_activity, name="post_task_activity"),
     path("task/dashboard", dashboard_statistics, name="dashboard_statistics"),
     path("task", get_tasks, name="get_tasks"),
-    path("task/<uuid:id>", get_task, name="get_task"),
+    path("task/<uuid:id>", get_or_trash_task, name="get_or_trash_task"),
     path("task/create-subtask/<uuid:id>", create_subtask, name="create_subtask"),
     path("task/update/<uuid:id>", update_task, name="update_task"),
     path("task/change-stage/<uuid:id>", update_task_stage, name="update_task_stage"),
-    path("task/<uuid:id>", trash_task, name="trash_task"),
+    # path("task/<uuid:id>", trash_task, name="trash_task"),
     path(
         "task/delete-restore/<uuid:id>",
         delete_restore_task,

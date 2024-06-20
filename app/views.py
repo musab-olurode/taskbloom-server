@@ -12,6 +12,8 @@ from .serializers import (
     UserSerializer,
     NoticeSerializer,
     TaskSerializer,
+    CreateTaskSerializer,
+    TeamSerializer,
 )
 from .utils import create_jwt_token
 from datetime import datetime
@@ -74,10 +76,9 @@ def get_team_list(request):
             "role__icontains": search,
             "email__icontains": search,
         }
-    users = User.objects.filter(**query).values(
-        "name", "title", "role", "email", "is_active"
-    )
-    return Response(users, status=status.HTTP_200_OK)
+    users = User.objects.filter(**query)
+    serializer = TeamSerializer(users, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
@@ -200,55 +201,78 @@ def delete_user_profile(request, id):
 
 @api_view(["POST"])
 def create_task(request):
-    try:
-        user_id = request.user.id
-        title = request.data.get("title")
-        team = request.data.get("team")
-        stage = request.data.get("stage").lower()
-        date = request.data.get("date")
-        priority = request.data.get("priority").lower()
-        assets = request.data.get("assets")
-
-        text = "New task has been assigned to you"
-        if len(team) > 1:
-            text = text + f" and {len(team) - 1} others."
-
-        text = (
-            text
-            + f" The task priority is set a {priority} priority, so check and act accordingly. The task date is {datetime.strptime(date, '%Y-%m-%d').strftime('%A %B %d, %Y')}. Thank you!!!"
-        )
-
-        activity = {
-            "type": "assigned",
-            "activity": text,
-            "by": user_id,
-        }
-
-        task = Task.objects.create(
-            title=title,
-            team=team,
-            stage=stage,
-            date=date,
-            priority=priority,
-            assets=assets,
-            activities=activity,
-        )
-
-        Notice.objects.create(
-            team=team,
-            text=text,
-            task=task.id,
-        )
-
+    data = request.data
+    serializer = CreateTaskSerializer(data=data, context={"request": request})
+    if serializer.is_valid(raise_exception=True):
+        serializer.save()
+        task_data = serializer.data
         return Response(
-            {"status": True, "task": task, "message": "Task created successfully."},
+            {
+                "status": True,
+                "task": task_data,
+                "message": "Task created successfully.",
+            },
             status=status.HTTP_200_OK,
         )
-    except Exception as e:
-        print(e)
-        return Response(
-            {"status": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST
-        )
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    # try:
+    #     user_id = request.user.id
+    #     title = request.data.get("title")
+    #     team_ids = request.data.get("team")
+    #     stage = request.data.get("stage").lower()
+    #     date = request.data.get("date")
+    #     priority = request.data.get("priority").lower()
+    #     assets = request.data.get("assets")
+
+    #     text = "New task has been assigned to you."
+    #     if len(team_ids) > 1:
+    #         text = text + f" and {len(team_ids) - 1} others."
+
+    #     text = (
+    #         text
+    #         + f" The task priority is set a {priority} priority, so check and act accordingly. The task date is {datetime.strptime(date, '%Y-%m-%d').strftime('%A %B %d, %Y')}. Thank you!!!"
+    #     )
+
+    #     activity = Activity.objects.create(
+    #         type="assigned",
+    #         activity=text,
+    #         by_id=user_id,
+    #     )
+
+    #     task = Task.objects.create(
+    #         title=title,
+    #         stage=stage,
+    #         date=date,
+    #         priority=priority,
+    #         assets=assets,
+    #     )
+    #     task.activities.add(activity)
+
+    #     notice = Notice.objects.create(
+    #         text=text,
+    #         task=task,
+    #     )
+
+    #     team = User.objects.filter(id__in=team_ids)
+    #     if team:
+    #         task.team.add(*team)
+    #         notice.team.add(*team)
+
+    #     serializer = TaskSerializer(task)
+
+    #     return Response(
+    #         {
+    #             "status": True,
+    #             "task": serializer.data,
+    #             "message": "Task created successfully.",
+    #         },
+    #         status=status.HTTP_200_OK,
+    #     )
+    # except Exception as e:
+    #     print(e)
+    #     return Response(
+    #         {"status": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST
+    #     )
 
 
 @api_view(["POST"])
@@ -472,49 +496,74 @@ def get_tasks(request):
     return Response({"status": True, "tasks": tasks_data}, status=status.HTTP_200_OK)
 
 
-@api_view(["GET"])
+@api_view(["GET", "PUT"])
 @permission_classes([IsAuthenticated])
-def get_task(request, id):
-    try:
+def get_or_trash_task(request, id):
+    if request.method == "GET":
+        try:
+            task = Task.objects.get(id=id)
+
+            task_data = {
+                "id": task.id,
+                "_id": task.id,
+                "title": task.title,
+                "stage": task.stage,
+                "priority": task.priority,
+                "subTasks": task.sub_tasks,
+                "assets": task.assets,
+                "date": task.date.strftime("%Y-%m-%d"),
+                "team": [
+                    {
+                        "id": member.id,
+                        "_id": member.id,
+                        "name": member.name,
+                        "title": member.title,
+                        "role": member.role,
+                        "email": member.email,
+                    }
+                    for member in task.team.all()
+                ],
+                "activities": [
+                    {
+                        "id": activity.id,
+                        "_id": activity.id,
+                        "type": activity.type,
+                        "activity": activity.activity,
+                        "by": activity.by.name,
+                    }
+                    for activity in task.activities.all()
+                ],
+            }
+
+            return Response(
+                {"status": True, "task": task_data}, status=status.HTTP_200_OK
+            )
+        except ObjectDoesNotExist:
+            return Response(
+                {"status": False, "message": "Task not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+    else:
+        if not request.user.is_superuser:
+            return Response(
+                {"status": False, "message": "Permission denied."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         task = Task.objects.get(id=id)
+        if task.DoesNotExist:
+            return Response(
+                {"status": False, "message": "Task not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        task_data = {
-            "id": task.id,
-            "_id": task.id,
-            "title": task.title,
-            "stage": task.stage,
-            "priority": task.priority,
-            "subTasks": task.sub_tasks,
-            "assets": task.assets,
-            "date": task.date.strftime("%Y-%m-%d"),
-            "team": [
-                {
-                    "id": member.id,
-                    "_id": member.id,
-                    "name": member.name,
-                    "title": member.title,
-                    "role": member.role,
-                    "email": member.email,
-                }
-                for member in task.team.all()
-            ],
-            "activities": [
-                {
-                    "id": activity.id,
-                    "_id": activity.id,
-                    "type": activity.type,
-                    "activity": activity.activity,
-                    "by": activity.by.name,
-                }
-                for activity in task.activities.all()
-            ],
-        }
+        task.is_trashed = True
 
-        return Response({"status": True, "task": task_data}, status=status.HTTP_200_OK)
-    except ObjectDoesNotExist:
+        task.save()
+
         return Response(
-            {"status": False, "message": "Task not found"},
-            status=status.HTTP_404_NOT_FOUND,
+            {"status": True, "message": "Task trashed successfully."},
+            status=status.HTTP_200_OK,
         )
 
 
@@ -536,27 +585,6 @@ def post_task_activity(request, id):
 
         return Response(
             {"status": True, "message": "Activity posted successfully."},
-            status=status.HTTP_200_OK,
-        )
-    except ObjectDoesNotExist:
-        return Response(
-            {"status": False, "message": "Task not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated])
-def trash_task(request, id):
-    try:
-        task = Task.objects.get(id=id)
-
-        task.is_trashed = True
-
-        task.save()
-
-        return Response(
-            {"status": True, "message": "Task trashed successfully."},
             status=status.HTTP_200_OK,
         )
     except ObjectDoesNotExist:

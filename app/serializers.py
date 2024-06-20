@@ -1,7 +1,8 @@
 from rest_framework import serializers
-from .models import User, Notice, Task
+from .models import User, Notice, Task, Activity
 from django.contrib.auth import authenticate
 from rest_framework.exceptions import AuthenticationFailed
+from datetime import datetime
 
 
 def snake_to_camel(snake_str):
@@ -123,3 +124,120 @@ class TaskSerializer(CamelCaseSerializer):
     class Meta:
         model = Task
         fields = "__all__"
+
+
+class TeamSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "name",
+            "title",
+            "role",
+            "email",
+            "is_active",
+        ]
+
+    def to_representation(self, instance: User):
+        return {
+            "_id": instance.id,
+            "id": instance.id,
+            "name": instance.name,
+            "title": instance.title,
+            "role": instance.role,
+            "email": instance.email,
+            "isActive": instance.is_active,
+        }
+
+
+class UserIdField(serializers.RelatedField):
+    def to_internal_value(self, data):
+        try:
+            user = User.objects.get(id=data)
+            return user.id
+        except User.DoesNotExist:
+            raise serializers.ValidationError(f"User with id {data} does not exist")
+
+    def to_representation(self, instance):
+        return {
+            "_id": instance.id,
+            "id": instance.id,
+            "name": instance.name,
+            "title": instance.title,
+            "role": instance.role,
+            "email": instance.email,
+            "isActive": instance.is_active,
+        }
+
+
+class CreateTaskSerializer(serializers.ModelSerializer):
+    # team = serializers.ListField(child=serializers.UUIDField())
+    team = UserIdField(many=True, queryset=User.objects.all())
+    assets = serializers.ListField(child=serializers.URLField())
+
+    class Meta:
+        model = Task
+        fields = [
+            "title",
+            "team",
+            "date",
+            "stage",
+            "priority",
+            "assets",
+        ]
+
+    def to_internal_value(self, data):
+        # Convert stage and priority to lowercase
+        if "stage" in data:
+            data["stage"] = data["stage"].lower()
+        if "priority" in data:
+            data["priority"] = data["priority"].lower()
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        team_ids = attrs.get("team")
+        for team_id in team_ids:
+            if not User.objects.filter(id=team_id).exists():
+                raise serializers.ValidationError(
+                    f"User with id {team_id} does not exist"
+                )
+        return attrs
+
+    def create(self, validated_data):
+        team_ids = validated_data.pop("team")
+        priority = validated_data["priority"]
+        date = validated_data["date"]
+
+        request = self.context.get("request")
+
+        formatted_date = date.strftime("%A %B %d, %Y")
+
+        activity_text = "New task has been assigned to you."
+        if len(team_ids) > 1:
+            activity_text = activity_text + f" and {len(team_ids) - 1} others."
+
+        activity_text = (
+            activity_text
+            + f" The task priority is set a {priority} priority, so check and act accordingly. The task date is {formatted_date}. Thank you!!!"
+        )
+
+        activity = Activity.objects.create(
+            type="assigned",
+            activity=activity_text,
+            by_id=request.user.id,
+        )
+
+        task = Task.objects.create(**validated_data)
+        task.activities.add(activity)
+
+        notice = Notice.objects.create(
+            text=activity_text,
+            task=task,
+        )
+
+        team = User.objects.filter(id__in=team_ids)
+        if team:
+            task.team.add(*team)
+            notice.team.add(*team)
+
+        return task

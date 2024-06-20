@@ -42,7 +42,7 @@ class Activity(TimeStampedModel):
         choices=[
             ("assigned", "Assigned"),
             ("started", "Started"),
-            ("in_progress", "In Progress"),
+            ("in progress", "In Progress"),
             ("bug", "Bug"),
             ("completed", "Completed"),
             ("commented", "Commented"),
@@ -77,7 +77,7 @@ class Task(TimeStampedModel):
         max_length=15,
         choices=[
             ("todo", "To Do"),
-            ("in_progress", "In Progress"),
+            ("in progress", "In Progress"),
             ("completed", "Completed"),
         ],
         default="todo",

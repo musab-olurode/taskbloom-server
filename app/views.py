@@ -395,7 +395,7 @@ def update_task_stage(request, id):
         )
 
 
-@api_view(["POST"])
+@api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def create_subtask(request, id):
     try:

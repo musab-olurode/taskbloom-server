@@ -137,10 +137,7 @@ AUTH_USER_MODEL = "app.User"
 
 REST_FRAMEWORK = {
     "NON_FIELD_ERRORS_KEY": "error",
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "app.middleware.TokenAuthSupportCookie",
-        # "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ),
+    "DEFAULT_AUTHENTICATION_CLASSES": ("app.middleware.TokenAuthSupportCookie",),
 }
 
 APPEND_SLASH = False

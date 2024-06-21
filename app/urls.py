@@ -45,7 +45,6 @@ urlpatterns = [
     path("task/create-subtask/<uuid:id>", create_subtask, name="create_subtask"),
     path("task/update/<uuid:id>", update_task, name="update_task"),
     path("task/change-stage/<uuid:id>", update_task_stage, name="update_task_stage"),
-    # path("task/<uuid:id>", trash_task, name="trash_task"),
     path(
         "task/delete-restore/<uuid:id>",
         delete_restore_task,

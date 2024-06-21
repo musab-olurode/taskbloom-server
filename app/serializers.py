@@ -171,7 +171,6 @@ class UserIdField(serializers.RelatedField):
 
 
 class CreateTaskSerializer(serializers.ModelSerializer):
-    # team = serializers.ListField(child=serializers.UUIDField())
     team = UserIdField(many=True, queryset=User.objects.all())
     assets = serializers.ListField(child=serializers.URLField())
 

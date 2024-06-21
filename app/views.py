@@ -104,10 +104,10 @@ def mark_notification_read(request):
     notice_id = request.query_params.get("id")
 
     if is_read_type == "all":
-        # Notice.objects.filter(team=user, is_read__nin=[user.id])
-        Notice.objects.filter(team=user).exclude(is_read__in=[user.id]).update(
-            is_read=[user.id]
-        )
+        notices = Notice.objects.filter(team=user).exclude(is_read__in=[user.id])
+        for notice in notices:
+            notice.is_read.add(user)
+            notice.save()
     else:
         Notice.objects.filter(id=notice_id).exclude(is_read__in=[user.id]).update(
             is_read=[user.id]
@@ -215,64 +215,6 @@ def create_task(request):
             status=status.HTTP_200_OK,
         )
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    # try:
-    #     user_id = request.user.id
-    #     title = request.data.get("title")
-    #     team_ids = request.data.get("team")
-    #     stage = request.data.get("stage").lower()
-    #     date = request.data.get("date")
-    #     priority = request.data.get("priority").lower()
-    #     assets = request.data.get("assets")
-
-    #     text = "New task has been assigned to you."
-    #     if len(team_ids) > 1:
-    #         text = text + f" and {len(team_ids) - 1} others."
-
-    #     text = (
-    #         text
-    #         + f" The task priority is set a {priority} priority, so check and act accordingly. The task date is {datetime.strptime(date, '%Y-%m-%d').strftime('%A %B %d, %Y')}. Thank you!!!"
-    #     )
-
-    #     activity = Activity.objects.create(
-    #         type="assigned",
-    #         activity=text,
-    #         by_id=user_id,
-    #     )
-
-    #     task = Task.objects.create(
-    #         title=title,
-    #         stage=stage,
-    #         date=date,
-    #         priority=priority,
-    #         assets=assets,
-    #     )
-    #     task.activities.add(activity)
-
-    #     notice = Notice.objects.create(
-    #         text=text,
-    #         task=task,
-    #     )
-
-    #     team = User.objects.filter(id__in=team_ids)
-    #     if team:
-    #         task.team.add(*team)
-    #         notice.team.add(*team)
-
-    #     serializer = TaskSerializer(task)
-
-    #     return Response(
-    #         {
-    #             "status": True,
-    #             "task": serializer.data,
-    #             "message": "Task created successfully.",
-    #         },
-    #         status=status.HTTP_200_OK,
-    #     )
-    # except Exception as e:
-    #     print(e)
-    #     return Response(
-    #         {"status": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST
-    #     )
 
 
 @api_view(["POST"])
@@ -347,9 +289,9 @@ def update_task(request, id):
         task.priority = priority
         task.assets = assets
         task.stage = stage
-        task.team = team
 
         task.save()
+        task.team.set(team)
 
         return Response(
             {"status": True, "message": "Task updated successfully."},
@@ -550,8 +492,9 @@ def get_or_trash_task(request, id):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        task = Task.objects.get(id=id)
-        if task.DoesNotExist:
+        try:
+            task = Task.objects.get(id=id)
+        except ObjectDoesNotExist:
             return Response(
                 {"status": False, "message": "Task not found"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -640,23 +583,75 @@ def dashboard_statistics(request):
             "name", "title", "role", "is_active", "created_at"
         )[:10]
 
-        grouped_tasks = (
+        raw_grouped_tasks = (
             all_tasks.values("stage").annotate(count=Count("stage")).order_by("stage")
         )
+        grouped_tasks = {task["stage"]: task["count"] for task in raw_grouped_tasks}
 
-        graph_data = (
+        raw_graph_data = (
             all_tasks.values("priority")
             .annotate(total=Count("priority"))
             .order_by("priority")
         )
+        graph_data = [
+            {"name": data["priority"], "total": data["total"]}
+            for data in raw_graph_data
+        ]
 
         total_tasks = all_tasks.count()
         last_10_tasks = all_tasks[:10]
 
+        last_10_tasks_data = [
+            {
+                "id": task.id,
+                "_id": task.id,
+                "title": task.title,
+                "stage": task.stage,
+                "priority": task.priority,
+                "subTasks": task.sub_tasks,
+                "assets": task.assets,
+                "date": task.date.strftime("%Y-%m-%d"),
+                "team": [
+                    {
+                        "id": member.id,
+                        "_id": member.id,
+                        "name": member.name,
+                        "title": member.title,
+                        "role": member.role,
+                        "email": member.email,
+                    }
+                    for member in task.team.all()
+                ],
+                "activities": [
+                    {
+                        "id": activity.id,
+                        "_id": activity.id,
+                        "type": activity.type,
+                        "activity": activity.activity,
+                        "by": activity.by.name,
+                        "date": activity.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                    for activity in task.activities.all()
+                ],
+            }
+            for task in last_10_tasks
+        ]
+
+        users_data = [
+            {
+                "name": user["name"],
+                "title": user["title"],
+                "role": user["role"],
+                "isActive": user["is_active"],
+                "createdAt": user["created_at"],
+            }
+            for user in users
+        ]
+
         summary = {
             "totalTasks": total_tasks,
-            "last10Task": last_10_tasks,
-            "users": users if is_admin else [],
+            "last10Task": last_10_tasks_data,
+            "users": users_data if is_admin else [],
             "tasks": grouped_tasks,
             "graphData": graph_data,
         }

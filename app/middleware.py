@@ -1,8 +1,3 @@
-# middleware.py
-from django.conf import settings
-from django.contrib.auth.middleware import get_user
-from django.utils.deprecation import MiddlewareMixin
-from rest_framework.authentication import BaseAuthentication
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
@@ -19,22 +14,6 @@ class TokenAuthSupportCookie(TokenAuthentication):
         if "token" in request.COOKIES and "HTTP_AUTHORIZATION" not in request.META:
             return self.authenticate_credentials(request.COOKIES.get("token"))
         return super().authenticate(request)
-
-
-class JWTAuthentication(BaseAuthentication):
-    def authenticate(self, request):
-        token = request.COOKIES.get("token")
-        if not token:
-            return None
-        user = get_user(token)
-        return (user, None)
-
-
-class JWTMiddleware(MiddlewareMixin):
-    def process_request(self, request):
-        user, _ = JWTAuthentication().authenticate(request)
-        if user:
-            request.user = user
 
 
 class ExceptionMiddleware:

@@ -11,12 +11,10 @@ from .serializers import (
     LoginSerializer,
     UserSerializer,
     NoticeSerializer,
-    TaskSerializer,
     CreateTaskSerializer,
     TeamSerializer,
 )
 from .utils import create_jwt_token
-from datetime import datetime
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q, Count
 from rest_framework.authtoken.models import Token
@@ -119,8 +117,16 @@ def mark_notification_read(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_user_profile(request):
-    user = request.user
     data = request.data
+
+    try:
+        user = User.objects.get(id=data.get("id"))
+    except User.DoesNotExist:
+        return Response(
+            {"status": False, "message": "User not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
     user.name = data.get("name", user.name)
     user.title = data.get("title", user.title)
     user.role = data.get("role", user.role)
@@ -137,27 +143,46 @@ def update_user_profile(request):
     )
 
 
-@api_view(["PUT"])
+@api_view(["PUT", "DELETE"])
 @permission_classes([IsAuthenticated])
-@user_passes_test(lambda u: u.isAdmin)
-def activate_user_profile(request, id):
-    try:
-        user = User.objects.get(id=id)
-        user.is_active = request.data["isActive"]
-        user.save()
-        user.password = None
-        return Response(
-            {
-                "status": True,
-                "message": f'User account has been {"activated" if user.is_active else "disabled"}',
-            },
-            status=status.HTTP_200_OK,
-        )
-    except User.DoesNotExist:
-        return Response(
-            {"status": False, "message": "User not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+def activate_or_delete_user_profile(request, id):
+    if request.method == "GET":
+        try:
+            user = User.objects.get(id=id)
+            user.is_active = request.data["isActive"]
+            user.save()
+            user.password = None
+            return Response(
+                {
+                    "status": True,
+                    "message": f'User account has been {"activated" if user.is_active else "disabled"}',
+                },
+                status=status.HTTP_200_OK,
+            )
+        except User.DoesNotExist:
+            return Response(
+                {"status": False, "message": "User not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+    else:
+        if not request.user.is_superuser:
+            return Response(
+                {"status": False, "message": "Permission denied."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            user = User.objects.get(id=id)
+            user.delete()
+            return Response(
+                {"status": True, "message": "User deleted successfully"},
+                status=status.HTTP_200_OK,
+            )
+        except User.DoesNotExist:
+            return Response(
+                {"status": False, "message": "User not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
 
 @api_view(["PUT"])
@@ -179,24 +204,6 @@ def change_user_password(request):
         {"status": True, "message": "Password changed successfully."},
         status=status.HTTP_200_OK,
     )
-
-
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-@user_passes_test(lambda u: u.isAdmin)
-def delete_user_profile(request, id):
-    try:
-        user = User.objects.get(id=id)
-        user.delete()
-        return Response(
-            {"status": True, "message": "User deleted successfully"},
-            status=status.HTTP_200_OK,
-        )
-    except User.DoesNotExist:
-        return Response(
-            {"status": False, "message": "User not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
 
 
 @api_view(["POST"])
@@ -224,36 +231,38 @@ def duplicate_task(request, id):
         user_id = request.user.id
         task = Task.objects.get(id=id)
 
+        team_count = task.team.count()
+
         text = "New task has been assigned to you"
-        if len(task.team) > 1:
-            text = text + f" and {len(task.team) - 1} others."
+        if team_count > 1:
+            text = text + f" and {team_count - 1} others."
 
         text = (
             text
             + f" The task priority is set a {task.priority} priority, so check and act accordingly. The task date is {task.date.strftime('%A %B %d, %Y')}. Thank you!!!"
         )
 
-        activity = {
-            "type": "assigned",
-            "activity": text,
-            "by": user_id,
-        }
+        activity = Activity.objects.create(
+            type="assigned",
+            activity=text,
+            by_id=user_id,
+        )
 
         new_task = Task.objects.create(
             title="Duplicate - " + task.title,
-            team=task.team,
             stage=task.stage,
             date=task.date,
             priority=task.priority,
             assets=task.assets,
-            activities=activity,
         )
+        new_task.activities.add(activity)
+        new_task.team.set(task.team.all())
 
-        Notice.objects.create(
-            team=new_task.team,
+        notice = Notice.objects.create(
             text=text,
-            task=new_task.id,
+            task=new_task,
         )
+        notice.team.set(task.team.all())
 
         return Response(
             {"status": True, "message": "Task duplicated successfully."},
@@ -520,7 +529,9 @@ def post_task_activity(request, id):
     try:
         task = Task.objects.get(id=id)
 
-        new_activity = Activity(type=type, activity=activity, by_id=user_id)
+        new_activity = Activity.objects.create(
+            type=type, activity=activity, by_id=user_id
+        )
 
         task.activities.add(new_activity)
 

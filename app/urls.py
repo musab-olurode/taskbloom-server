@@ -7,9 +7,8 @@ from .views import (
     get_notifications_list,
     mark_notification_read,
     update_user_profile,
-    activate_user_profile,
+    activate_or_delete_user_profile,
     change_user_password,
-    delete_user_profile,
     # Task
     create_task,
     duplicate_task,
@@ -33,8 +32,11 @@ urlpatterns = [
     path("user/read-noti", mark_notification_read, name="mark_notification_read"),
     path("user/profile", update_user_profile, name="update_user_profile"),
     path("user/change-password", change_user_password, name="change_user_password"),
-    path("user/<uuid:id>", activate_user_profile, name="activate_user_profile"),
-    path("user/<uuid:id>", delete_user_profile, name="delete_user_profile"),
+    path(
+        "user/<uuid:id>",
+        activate_or_delete_user_profile,
+        name="activate_or_delete_user_profile",
+    ),
     # Tasks
     path("task/create", create_task, name="create_task"),
     path("task/duplicate/<uuid:id>", duplicate_task, name="duplicate_task"),

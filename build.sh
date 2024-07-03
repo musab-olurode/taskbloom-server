@@ -13,4 +13,4 @@ python manage.py migrate
 
 # python manage.py createsuperuser --no-input
 
-python manage.py createsuperuser --username Admin --email admin@mail.com --password secret --noinput
+python manage.py createsuperuser --email admin@mail.com --name Admin --noinput

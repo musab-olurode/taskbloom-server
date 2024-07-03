@@ -1,13 +1,13 @@
 databases:
   - name: taskbloomdb
     plan: free
-    databaseName: task-bloom
-    user: task-bloom
+    databaseName: taskbloom
+    user: taskbloom
 
 services:
   - type: web
     plan: free
-    name: task-bloom
+    name: taskbloom
     runtime: python
     buildCommand: './build.sh'
     startCommand: 'python -m gunicorn task-management-system.asgi:application -k uvicorn.workers.UvicornWorker'

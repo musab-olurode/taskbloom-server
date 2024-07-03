@@ -20,6 +20,7 @@ from .views import (
     update_task,
     update_task_stage,
     delete_restore_task,
+    delete_restore_all_tasks,
 )
 
 urlpatterns = [
@@ -52,5 +53,7 @@ urlpatterns = [
         delete_restore_task,
         name="delete_restore_task",
     ),
-    path("task/delete-restore", delete_restore_task, name="delete_restore_all_tasks"),
+    path(
+        "task/delete-restore", delete_restore_all_tasks, name="delete_restore_all_tasks"
+    ),
 ]

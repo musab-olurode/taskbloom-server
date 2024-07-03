@@ -556,12 +556,30 @@ def delete_restore_task(request, id):
     try:
         if action_type == "delete":
             Task.objects.get(id=id).delete()
-        elif action_type == "deleteAll":
-            Task.objects.filter(is_trashed=True).delete()
         elif action_type == "restore":
             task = Task.objects.get(id=id)
             task.is_trashed = False
             task.save()
+
+        return Response(
+            {"status": True, "message": "Operation performed successfully."},
+            status=status.HTTP_200_OK,
+        )
+    except ObjectDoesNotExist:
+        return Response(
+            {"status": False, "message": "Task not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_restore_all_tasks(request):
+    action_type = request.GET.get("actionType")
+
+    try:
+        if action_type == "deleteAll":
+            Task.objects.filter(is_trashed=True).delete()
         elif action_type == "restoreAll":
             Task.objects.filter(is_trashed=True).update(is_trashed=False)
 

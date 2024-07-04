@@ -79,8 +79,7 @@ def logout_user(request):
     response = Response(
         {"message": "Logged out successfully"}, status=status.HTTP_200_OK
     )
-    response.delete_cookie("token")
-    response.delete_cookie("csrftoken")
+    response.set_cookie("token", samesite="None")
     Token.objects.filter(key=request.COOKIES.get("token")).delete()
     return response
 

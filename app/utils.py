@@ -15,6 +15,6 @@ def create_jwt_token(response: Response, user_id):
         token.key,
         max_age=max_age,
         secure=True,
-        httponly=False,
+        httponly=True,
         samesite="None",
     )

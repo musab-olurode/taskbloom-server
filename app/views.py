@@ -18,6 +18,7 @@ from .utils import create_jwt_token
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q, Count
 from rest_framework.authtoken.models import Token
+from rest_framework.exceptions import APIException
 
 User = get_user_model()
 
@@ -27,17 +28,27 @@ User = get_user_model()
 def register_user(request):
     user = request.data
     serializer = UserRegisterSerializer(data=user)
-    if serializer.is_valid(raise_exception=True):
-        serializer.save()
-        user_data = serializer.data
-        response = Response(
-            user_data,
-            status=status.HTTP_201_CREATED,
+    try:
+        serializer.is_valid(raise_exception=True)
+    except APIException as e:
+        return Response(
+            {"message": e.detail},
+            status=status.HTTP_401_UNAUTHORIZED,
         )
-        if user_data["isAdmin"]:
-            create_jwt_token(response, user_data["id"])
-        return response
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response(
+            {"message": str(e)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    serializer.save()
+    user_data = serializer.data
+    response = Response(
+        user_data,
+        status=status.HTTP_201_CREATED,
+    )
+    if user_data["isAdmin"]:
+        create_jwt_token(response, user_data["id"])
+    return response
 
 
 @api_view(["POST"])
@@ -45,7 +56,18 @@ def register_user(request):
 def login_user(request):
     data = request.data
     serializer = LoginSerializer(data=data, context={"request": request})
-    serializer.is_valid(raise_exception=True)
+    try:
+        serializer.is_valid(raise_exception=True)
+    except APIException as e:
+        return Response(
+            {"message": e.detail},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+    except Exception as e:
+        return Response(
+            {"message": str(e)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     response = Response(serializer.data, status=status.HTTP_200_OK)
     user_data = serializer.data
     create_jwt_token(response, user_data["id"])
@@ -58,6 +80,7 @@ def logout_user(request):
         {"message": "Logged out successfully"}, status=status.HTTP_200_OK
     )
     response.delete_cookie("token")
+    response.delete_cookie("csrftoken")
     Token.objects.filter(key=request.COOKIES.get("token")).delete()
     return response
 

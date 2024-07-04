@@ -1,4 +1,5 @@
 # views.py
+import os
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import user_passes_test
 from rest_framework.decorators import api_view, permission_classes
@@ -195,6 +196,11 @@ def activate_or_delete_user_profile(request, id):
 
         try:
             user = User.objects.get(id=id)
+            if user.email == os.getenv('DJANGO_SUPERUSER_EMAIL', 'admin@mail.com'):
+                return Response(
+                    {"status": False, "message": "You cannot delete this superuser."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             user.delete()
             return Response(
                 {"status": True, "message": "User deleted successfully"},

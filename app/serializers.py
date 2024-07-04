@@ -76,6 +76,8 @@ class LoginSerializer(serializers.ModelSerializer):
             raise AuthenticationFailed(
                 "user account has been deactivated, contact the administrator"
             )
+        user.last_login = datetime.now()
+        user.save()
         return user
 
     def to_representation(self, instance):
